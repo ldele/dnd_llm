@@ -101,9 +101,18 @@ STRICT RULES:
 """
 
 
-def build_user_prompt(state: GameState, result: ActionLog) -> str:
-    """Assemble the full user-turn prompt from state and action result."""
-    return (
-        f"Game state:\n{serialize_state(state)}\n\n"
-        f"Action result:\n{serialize_result(result, state)}"
-    )
+def build_user_prompt(
+    state: GameState,
+    result: ActionLog,
+    memory_block: str = "",
+) -> str:
+    """Assemble the full user-turn prompt from state, action result, and memory."""
+    parts = []
+
+    if memory_block:
+        parts.append(f"Context:\n{memory_block}")
+
+    parts.append(f"Game state:\n{serialize_state(state)}")
+    parts.append(f"Action result:\n{serialize_result(result, state)}")
+
+    return "\n\n".join(parts)
