@@ -98,6 +98,15 @@ STRICT RULES:
 - Do NOT invent enemies, items, or events not in the state
 - Do NOT ask questions or address the player directly
 - Length: exactly 2-3 sentences
+
+OUTPUT FORMAT:
+Respond with valid JSON only. No markdown, no code fences, no extra text.
+
+{
+  "narration": "2-3 sentence immersive description",
+  "tone": one of "tense" | "victorious" | "grim" | "neutral",
+  "hit": true or false
+}
 """
 
 

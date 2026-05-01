@@ -1,3 +1,5 @@
+from engine.state import NarrationResult
+from llm.narrator import _parse
 from engine.state import init_state
 from engine.combat import player_attack
 from llm.prompts import hp_label, serialize_state, serialize_result, build_user_prompt
@@ -29,3 +31,27 @@ def test_build_user_prompt_no_raw_numbers_alone():
     assert "critical hit" in prompt
     assert "Game state" in prompt
     assert "Action result" in prompt
+
+def test_parse_valid_json():
+    state = init_state()
+    result = player_attack(state)
+    raw = '{"narration": "The hero strikes true.", "tone": "tense", "hit": true}'
+    parsed = _parse(raw, result)
+    assert isinstance(parsed, NarrationResult)
+    assert parsed.hit is True
+    assert parsed.tone == "tense"
+
+
+def test_parse_invalid_json_returns_fallback():
+    state = init_state()
+    result = player_attack(state)
+    parsed = _parse("This is not JSON at all.", result)
+    assert isinstance(parsed, NarrationResult)  # fallback always returns valid object
+
+
+def test_parse_strips_markdown_fences():
+    state = init_state()
+    result = player_attack(state)
+    raw = '```json\n{"narration": "Strike!", "tone": "neutral", "hit": false}\n```'
+    parsed = _parse(raw, result)
+    assert parsed.narration == "Strike!"
