@@ -3,11 +3,11 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
-from engine.state import init_state, DebugEntry, Fighter
+from engine.state import init_state, DebugEntry, Fighter, NarrationEval
 from engine.combat import player_attack, enemy_attack
 from llm.narrator import narrate
 from llm.memory import get_memory_block
-from llm.prompts import build_user_prompt, serialize_state
+from llm.prompts import build_user_prompt, serialize_state, build_context_usage
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ if state.status == "ongoing":
                 # Player turn
                 result = player_attack(state)
                 prompt = build_user_prompt(state, result, memory_block)
-                narration_result, raw = narrate(state, result, memory_block)
+                narration_result, raw, eval_result, context_usage = narrate(state, result, memory_block)
                 st.session_state.log.append(narration_result)
                 st.session_state.narration_log.append(narration_result.narration)
                 st.session_state.debug_log.append(DebugEntry(
@@ -136,13 +136,15 @@ if state.status == "ongoing":
                     raw_llm_output=raw,
                     parsed=narration_result,
                     state_snapshot=serialize_state(state),
+                    eval_result=eval_result,
+                    context_usage=context_usage,
                 ))
 
                 # Enemy turn (if still alive)
                 if state.status == "ongoing":
                     result = enemy_attack(state)
                     prompt = build_user_prompt(state, result, memory_block)
-                    narration_result, raw = narrate(state, result, memory_block)
+                    narration_result, raw, eval_result, context_usage = narrate(state, result, memory_block)
                     st.session_state.log.append(narration_result)
                     st.session_state.narration_log.append(narration_result.narration)
                     st.session_state.debug_log.append(DebugEntry(
@@ -152,7 +154,9 @@ if state.status == "ongoing":
                         raw_llm_output=raw,
                         parsed=narration_result,
                         state_snapshot=serialize_state(state),
-                    ))
+                        eval_result=eval_result,
+                        context_usage=context_usage,
+                ))
 
                 state.turn += 1
             st.rerun()
@@ -187,30 +191,91 @@ elif state.status == "defeat":
         st.rerun()
 
 # ---------------------------------------------------------------------------
+# Eval summary bar (always visible after first turn)
+# ---------------------------------------------------------------------------
+
+if st.session_state.debug_log:
+    total = len(st.session_state.debug_log)
+    passed = sum(1 for e in st.session_state.debug_log if e.eval_result.passed)
+    pass_rate = passed / total
+
+    st.markdown("### 📊 Eval Summary")
+    col_e1, col_e2, col_e3 = st.columns(3)
+    col_e1.metric("Turns evaluated", total)
+    col_e2.metric("Passed", passed)
+    col_e3.metric("Pass rate", f"{pass_rate:.0%}")
+
+
+# ---------------------------------------------------------------------------
 # Debug panel
 # ---------------------------------------------------------------------------
+
 
 with st.expander("🔍 Debug Panel", expanded=False):
     if not st.session_state.debug_log:
         st.caption("No turns yet. Attack to generate debug data.")
     else:
         for entry in reversed(st.session_state.debug_log):
-            st.markdown(f"**Turn {entry.turn} — {entry.actor}**")
+            # Header with pass/fail badge
+            status = "✅ PASS" if entry.eval_result.passed else "❌ FAIL"
+            st.markdown(f"**Turn {entry.turn} — {entry.actor}** {status}")
+
+            # Token usage
+            cu = entry.context_usage
+            st.markdown(
+                f"`system`: {cu['system_tokens']} tokens  "
+                f"`prompt`: {cu['prompt_tokens']} tokens  "
+                f"`total`: {cu['total_tokens']} / {cu['context_limit']}  "
+                f"`budget used`: {cu['budget_used_pct']}%"
+            )
+
+            # Eval details
+            ev = entry.eval_result
+            st.markdown(
+                f"`hp_mentioned`: {'❌' if ev.hp_mentioned else '✅'}  "
+                f"`sentences`: {ev.sentence_count}  "
+                f"`format_valid`: {'✅' if ev.format_valid else '❌'}  "
+                f"`fallback_used`: {'❌' if ev.fallback_used else '✅'}"
+            )
 
             col_left, col_right = st.columns(2)
 
             with col_left:
                 st.markdown("**State snapshot**")
                 st.code(entry.state_snapshot, language="text")
-
                 st.markdown("**Parsed output**")
                 st.json(entry.parsed.model_dump())
 
             with col_right:
                 st.markdown("**Prompt sent**")
                 st.code(entry.prompt, language="text")
-
                 st.markdown("**Raw LLM response**")
                 st.code(entry.raw_llm_output, language="json")
 
             st.divider()
+
+# ---------------------------------------------------------------------------
+# Session export
+# ---------------------------------------------------------------------------
+
+if st.session_state.debug_log:
+    import json
+
+    session_data = {
+        "scenario": state.enemy.name,
+        "turns": state.turn,
+        "status": state.status,
+        "eval_summary": {
+            "total": len(st.session_state.debug_log),
+            "passed": sum(1 for e in st.session_state.debug_log if e.eval_result.passed),
+        },
+        "entries": [e.model_dump() for e in st.session_state.debug_log],
+    }
+
+    st.download_button(
+        label="📥 Export session as JSON",
+        data=json.dumps(session_data, indent=2),
+        file_name=f"session_turn{state.turn}_{state.enemy.name.lower().replace(' ', '_')}.json",
+        mime="application/json",
+    )
+

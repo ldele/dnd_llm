@@ -43,4 +43,22 @@ class DebugEntry(BaseModel):
     prompt: str
     raw_llm_output: str
     parsed: NarrationResult
-    state_snapshot: str  # serialized state at time of call
+    state_snapshot: str
+    eval_result: NarrationEval
+    context_usage: dict 
+
+
+class NarrationEval(BaseModel):
+    hp_mentioned: bool      # True = constraint violation
+    sentence_count: int     # should be 2-3
+    format_valid: bool      # True = JSON parsed without fallback
+    fallback_used: bool     # True = LLM failed, fallback fired
+
+    @property
+    def passed(self) -> bool:
+        return (
+            not self.hp_mentioned
+            and 2 <= self.sentence_count <= 3
+            and self.format_valid
+            and not self.fallback_used
+        )

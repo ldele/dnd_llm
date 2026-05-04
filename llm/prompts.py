@@ -158,3 +158,32 @@ def build_user_prompt(
     parts.append(f"Action result:\n{serialize_result(result, state)}")
 
     return "\n\n".join(parts)
+
+# ---------------------------------------------------------------------------
+# Token budget
+# ---------------------------------------------------------------------------
+
+CONTEXT_LIMIT = 4096  # claude-haiku context window (conservative estimate)
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough token estimate: ~4 characters per token."""
+    return len(text) // 4
+
+
+def build_context_usage(system: str, user_prompt: str) -> dict:
+    """
+    Estimate token usage for a narration call.
+    Returns a dict for display in the debug panel.
+    """
+    system_tokens = estimate_tokens(system)
+    prompt_tokens = estimate_tokens(user_prompt)
+    total = system_tokens + prompt_tokens
+
+    return {
+        "system_tokens": system_tokens,
+        "prompt_tokens": prompt_tokens,
+        "total_tokens": total,
+        "context_limit": CONTEXT_LIMIT,
+        "budget_used_pct": round(total / CONTEXT_LIMIT * 100, 1),
+    }

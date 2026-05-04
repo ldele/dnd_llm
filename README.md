@@ -12,24 +12,27 @@ A dungeon crawler where game logic is fully deterministic and an LLM acts purely
 - Controlled, constrained use of LLMs — the model never touches game state
 - Structured JSON output with Pydantic validation and graceful fallback
 - Per-character voice profiles — prompt engineering for stylistically distinct narration
+- Automatic evaluation layer — every narration is checked against its own constraints
 - Bounded context management via rolling memory summarization
-- Full observability — every prompt, raw LLM response, and parsed output is traceable
-- Modular architecture ready to extend (inventory, spells, multiple enemies)
+- Token budget tracking — context usage estimated and logged per call
+- Production-grade reliability — exponential backoff retry on API failure
+- Full observability — every prompt, raw response, eval result, and token count is traceable
+- Session export — full debug data downloadable as JSON for offline analysis
 
 ---
 
 ## Architecture
 
 ```
-Button click → engine step → LLM narration (with memory + voice) → UI refresh
+Button click → engine step → LLM narration (retry + memory + voice) → eval → UI refresh
 ```
 
 | Layer | Role | Tech |
 |---|---|---|
 | `engine/` | Dice rolls, combat, state | Pure Python + Pydantic |
-| `llm/` | Narration, prompts, memory | Anthropic API |
+| `llm/` | Narration, prompts, memory, eval | Anthropic API |
 | `ui/` | Interactive interface | Streamlit |
-| `tests/` | Engine unit tests | pytest |
+| `tests/` | Engine + evaluator unit tests | pytest |
 
 **The LLM never modifies state. State is the single source of truth.**
 
@@ -41,24 +44,26 @@ Button click → engine step → LLM narration (with memory + voice) → UI refr
 dnd_llm/
 │
 ├── engine/
-│   ├── state.py        # GameState + Fighter + NarrationResult + DebugEntry models
+│   ├── state.py        # GameState, Fighter, NarrationResult, DebugEntry, NarrationEval
 │   ├── combat.py       # Dice rolls, attack logic
 │   └── actions.py
 │
 ├── llm/
-│   ├── narrator.py     # narrate() — returns (NarrationResult, raw_output)
-│   ├── prompts.py      # Templates, state serializer, character voice profiles
+│   ├── narrator.py     # narrate() — retry logic, returns (result, raw, eval, context)
+│   ├── prompts.py      # Templates, serializer, voice profiles, token budget
+│   ├── evaluator.py    # Automatic constraint checking on every narration
 │   └── memory.py       # Rolling summarization, context management
 │
 ├── ui/
-│   └── app.py          # Streamlit interface with scenario selector + debug panel
+│   └── app.py          # Streamlit UI — scenario selector, eval bar, debug panel, export
 │
 ├── game/
 │   └── loop.py         # CLI fallback for engine debugging
 │
 ├── tests/
 │   ├── test_combat.py
-│   └── test_prompts.py
+│   ├── test_prompts.py
+│   └── test_evaluator.py
 │
 ├── main.py             # CLI entry point
 ├── .env                # API key (not committed)
@@ -112,7 +117,7 @@ python main.py
 pytest tests/ -v
 ```
 
-11 tests covering the deterministic engine and prompt parsing logic. LLM calls are not unit tested — they are validated via the CLI smoke test and the in-app debug panel.
+18 tests covering the deterministic engine, prompt parsing, and the evaluation layer. LLM calls are not unit tested — they are validated via the CLI smoke test, the in-app eval summary, and the session export.
 
 ---
 
@@ -136,13 +141,36 @@ Narration entries are colored by the LLM-returned tone field:
 - 🔴 `grim` — taking heavy damage
 - ⚫ `neutral` — a miss or uneventful turn
 
-### Observability debug panel
-Expand the debug panel at any point to inspect, for every turn:
+### Automatic evaluation layer
+Every narration is checked against the constraints defined in the system prompt:
 
-- The exact state snapshot sent (semantic labels, not raw numbers)
-- The full prompt sent to the LLM
-- The raw JSON string the model returned
-- The parsed and validated `NarrationResult`
+| Check | What it catches |
+|---|---|
+| `hp_mentioned` | LLM leaking raw HP numbers into prose |
+| `sentence_count` | Output outside the 2-3 sentence constraint |
+| `format_valid` | JSON response that couldn't be parsed |
+| `fallback_used` | API failure or total parse failure |
+
+A live eval summary bar shows total turns, passes, and pass rate across the session.
+
+### Retry logic with exponential backoff
+API calls retry up to 3 times (waits: 1s, 2s, 4s) before falling back to a deterministic narration. The game never crashes on a transient API error.
+
+### Token budget tracking
+Every narration call estimates token usage (system prompt + user prompt) and logs it against the context limit. Visible in the debug panel per turn.
+
+### Observability debug panel
+Expand the debug panel at any point to inspect every turn:
+
+- Pass/fail status with per-check breakdown
+- Token usage vs context budget
+- Exact state snapshot sent (semantic labels, not raw numbers)
+- Full prompt sent to the LLM
+- Raw JSON string the model returned
+- Parsed and validated `NarrationResult`
+
+### Session export
+Download the complete session as a structured JSON file — including all prompts, raw responses, eval results, and token counts. Useful for offline analysis and sharing demos.
 
 ---
 
@@ -167,7 +195,7 @@ The narrator receives a structured prompt built from three components:
 - **Game state** — semantic labels (e.g. `"critically wounded"`) not raw numbers
 - **Action result** — what the engine computed (roll, damage, actor)
 
-The system prompt is generated dynamically per enemy type, injecting a voice profile and a few-shot example to enforce stylistic consistency:
+The system prompt is generated dynamically per enemy type, injecting a voice profile and a few-shot example:
 
 ```
 The enemy in this scene is an orc warlord.
@@ -186,7 +214,7 @@ Output is constrained to valid JSON:
 }
 ```
 
-If the model returns invalid JSON, a deterministic fallback fires — the game never crashes on a bad LLM response.
+If the model returns invalid JSON after retries, a deterministic fallback fires — the game never crashes on a bad LLM response.
 
 ---
 
@@ -201,12 +229,27 @@ Using `claude-haiku-4-5-20251001` (~2 calls per turn):
 
 ---
 
+## CV Positioning
+
+This project demonstrates:
+
+- **System design** — deterministic core with a controlled AI presentation layer
+- **LLM engineering** — structured output, constraint enforcement, fallback handling
+- **Prompt engineering** — dynamic voice profiles, few-shot examples, semantic serialization
+- **Observability** — full traceability of every LLM interaction
+- **Evaluation** — automated constraint checking without human review
+- **Production awareness** — retry logic, token budgeting, graceful degradation
+
+---
+
 ## Roadmap
 
 - [ ] Multiple simultaneous enemies
 - [ ] Inventory and item system
 - [ ] Spells and abilities
 - [ ] Defend and flee actions
+- [ ] Prompt versioning and A/B comparison
+- [ ] LLM-as-judge hallucination detection
 - [ ] Procedural dungeon rooms
 - [ ] Save / load game state
 
