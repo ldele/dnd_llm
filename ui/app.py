@@ -3,11 +3,31 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
-from engine.state import init_state, DebugEntry
+from engine.state import init_state, DebugEntry, Fighter
 from engine.combat import player_attack, enemy_attack
 from llm.narrator import narrate
 from llm.memory import get_memory_block
 from llm.prompts import build_user_prompt, serialize_state
+
+
+# ---------------------------------------------------------------------------
+# Scenarios (enemy to fight)
+# ---------------------------------------------------------------------------
+
+SCENARIOS = {
+    "Goblin Ambush": {
+        "enemy": Fighter(name="Goblin", hp=10, max_hp=10, attack=3, enemy_type="goblin")
+    },
+    "Orc Warlord": {
+        "enemy": Fighter(name="Orc Warlord", hp=20, max_hp=20, attack=6, enemy_type="orc_warrior")
+    },
+    "Skeleton Guard": {
+        "enemy": Fighter(name="Skeleton", hp=8, max_hp=8, attack=4, enemy_type="skeleton")
+    },
+    "Ancient Dragon": {
+        "enemy": Fighter(name="Ancient Dragon", hp=40, max_hp=40, attack=10, enemy_type="dragon")
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -29,9 +49,16 @@ if "summary" not in st.session_state:
 if "debug_log" not in st.session_state:
     st.session_state.debug_log = []  # list of DebugEntry objects
 
-
 state = st.session_state.game
 
+# ---------------------------------------------------------------------------
+# Scenario selector (only shown before game starts)
+# ---------------------------------------------------------------------------
+
+if not st.session_state.log and state.turn == 1:
+    scenario_name = st.selectbox("Choose your enemy", list(SCENARIOS.keys()))
+    selected = SCENARIOS[scenario_name]
+    st.session_state.game.enemy = selected["enemy"]
 
 # ---------------------------------------------------------------------------
 # Layout

@@ -84,29 +84,62 @@ def serialize_result(result: ActionLog, state: GameState) -> str:
         else:
             return f"{enemy_name} attacks — miss (roll: {result.roll}), no damage."
 
+# ---------------------------------------------------------------------------
+# Character Voices
+# ---------------------------------------------------------------------------
+
+CHARACTER_VOICES = {
+    "goblin": {
+        "style": "chaotic and crude",
+        "vocabulary": "short sentences, animalistic energy, desperation",
+        "example": "The goblin shrieks and lunges, all tooth and claw and fury.",
+    },
+    "orc_warrior": {
+        "style": "brutal and proud",
+        "vocabulary": "heavy, deliberate, honour-focused",
+        "example": "The orc advances without flinching, each blow a statement of dominance.",
+    },
+    "skeleton": {
+        "style": "cold and mechanical",
+        "vocabulary": "no emotion, clinical, ancient",
+        "example": "The skeleton moves with hollow precision, indifferent to pain or fear.",
+    },
+    "dragon": {
+        "style": "ancient and contemptuous",
+        "vocabulary": "grand, slow, condescending — this is beneath it",
+        "example": "The dragon exhales with mild irritation, as if swatting a fly.",
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Prompt templates
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are a dungeon master narrator.
+def build_system_prompt(enemy_type: str = "goblin") -> str:
+    voice = CHARACTER_VOICES.get(enemy_type, CHARACTER_VOICES["goblin"])
+    return f"""You are a dungeon master narrator.
 Your ONLY job is to translate the action result into vivid prose.
+
+The enemy in this scene is a {enemy_type.replace('_', ' ')}.
+Narrate their actions in a {voice['style']} voice.
+Vocabulary guidance: {voice['vocabulary']}
+Example of correct tone: "{voice['example']}"
 
 STRICT RULES:
 - Use ONLY the facts given to you
-- Do NOT mention HP numbers — describe them as wounds, energy, exhaustion, etc.
+- Do NOT mention HP numbers
 - Do NOT invent enemies, items, or events not in the state
-- Do NOT ask questions or address the player directly
+- Do NOT address the player directly
 - Length: exactly 2-3 sentences
 
 OUTPUT FORMAT:
 Respond with valid JSON only. No markdown, no code fences, no extra text.
 
-{
+{{
   "narration": "2-3 sentence immersive description",
   "tone": one of "tense" | "victorious" | "grim" | "neutral",
   "hit": true or false
-}
+}}
 """
 
 

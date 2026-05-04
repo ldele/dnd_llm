@@ -10,7 +10,10 @@ A dungeon crawler where game logic is fully deterministic and an LLM acts purely
 
 - Clean separation between deterministic game logic and AI narration
 - Controlled, constrained use of LLMs — the model never touches game state
+- Structured JSON output with Pydantic validation and graceful fallback
+- Per-character voice profiles — prompt engineering for stylistically distinct narration
 - Bounded context management via rolling memory summarization
+- Full observability — every prompt, raw LLM response, and parsed output is traceable
 - Modular architecture ready to extend (inventory, spells, multiple enemies)
 
 ---
@@ -18,7 +21,7 @@ A dungeon crawler where game logic is fully deterministic and an LLM acts purely
 ## Architecture
 
 ```
-Button click → engine step → LLM narration (with memory) → UI refresh
+Button click → engine step → LLM narration (with memory + voice) → UI refresh
 ```
 
 | Layer | Role | Tech |
@@ -38,23 +41,23 @@ Button click → engine step → LLM narration (with memory) → UI refresh
 dnd_llm/
 │
 ├── engine/
-│   ├── state.py        # GameState Pydantic model
+│   ├── state.py        # GameState + Fighter + NarrationResult + DebugEntry models
 │   ├── combat.py       # Dice rolls, attack logic
 │   └── actions.py
 │
 ├── llm/
-│   ├── narrator.py     # narrate() — single LLM call per action
-│   ├── prompts.py      # Templates + state serializer
+│   ├── narrator.py     # narrate() — returns (NarrationResult, raw_output)
+│   ├── prompts.py      # Templates, state serializer, character voice profiles
 │   └── memory.py       # Rolling summarization, context management
 │
 ├── ui/
-│   └── app.py          # Streamlit interface
+│   └── app.py          # Streamlit interface with scenario selector + debug panel
 │
 ├── game/
 │   └── loop.py         # CLI fallback for engine debugging
 │
 ├── tests/
-│   └── test_combat.py
+│   ├── test_combat.py
 │   └── test_prompts.py
 │
 ├── main.py             # CLI entry point
@@ -109,7 +112,37 @@ python main.py
 pytest tests/ -v
 ```
 
-Tests cover the deterministic engine only. LLM calls are not unit tested — they are validated manually via the CLI smoke test.
+11 tests covering the deterministic engine and prompt parsing logic. LLM calls are not unit tested — they are validated via the CLI smoke test and the in-app debug panel.
+
+---
+
+## Features
+
+### Scenario selector
+Choose your enemy before the fight begins. Each enemy has distinct stats and a unique narration voice:
+
+| Scenario | Enemy | HP | Attack | Voice |
+|---|---|---|---|---|
+| Goblin Ambush | Goblin | 10 | 3 | Chaotic, crude, desperate |
+| Orc Warlord | Orc Warlord | 20 | 6 | Brutal, proud, honour-focused |
+| Skeleton Guard | Skeleton | 8 | 4 | Cold, mechanical, ancient |
+| Ancient Dragon | Ancient Dragon | 40 | 10 | Contemptuous, grand, slow |
+
+### Tone-colored game log
+Narration entries are colored by the LLM-returned tone field:
+
+- 🟠 `tense` — the fight is balanced
+- 🟢 `victorious` — a decisive blow
+- 🔴 `grim` — taking heavy damage
+- ⚫ `neutral` — a miss or uneventful turn
+
+### Observability debug panel
+Expand the debug panel at any point to inspect, for every turn:
+
+- The exact state snapshot sent (semantic labels, not raw numbers)
+- The full prompt sent to the LLM
+- The raw JSON string the model returned
+- The parsed and validated `NarrationResult`
 
 ---
 
@@ -134,15 +167,26 @@ The narrator receives a structured prompt built from three components:
 - **Game state** — semantic labels (e.g. `"critically wounded"`) not raw numbers
 - **Action result** — what the engine computed (roll, damage, actor)
 
-The system prompt constrains the model strictly:
+The system prompt is generated dynamically per enemy type, injecting a voice profile and a few-shot example to enforce stylistic consistency:
 
 ```
-- Use ONLY the facts given
-- Do NOT mention HP numbers
-- Do NOT invent enemies, items, or events
-- Do NOT address the player
-- Length: exactly 2-3 sentences
+The enemy in this scene is an orc warlord.
+Narrate their actions in a brutal and proud voice.
+Vocabulary guidance: heavy, deliberate, honour-focused.
+Example of correct tone: "The orc advances without flinching, each blow a statement of dominance."
 ```
+
+Output is constrained to valid JSON:
+
+```json
+{
+  "narration": "2-3 sentence description",
+  "tone": "tense" | "victorious" | "grim" | "neutral",
+  "hit": true | false
+}
+```
+
+If the model returns invalid JSON, a deterministic fallback fires — the game never crashes on a bad LLM response.
 
 ---
 
@@ -159,10 +203,10 @@ Using `claude-haiku-4-5-20251001` (~2 calls per turn):
 
 ## Roadmap
 
-- [ ] Multiple enemies
-- [ ] Inventory system
+- [ ] Multiple simultaneous enemies
+- [ ] Inventory and item system
 - [ ] Spells and abilities
-- [ ] Structured JSON output from narrator (drive UI effects from tone)
+- [ ] Defend and flee actions
 - [ ] Procedural dungeon rooms
 - [ ] Save / load game state
 

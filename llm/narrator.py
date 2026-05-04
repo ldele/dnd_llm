@@ -15,7 +15,7 @@ import json
 from anthropic import Anthropic
 from dotenv import load_dotenv
 from engine.state import GameState, ActionLog, NarrationResult
-from llm.prompts import SYSTEM_PROMPT, build_user_prompt
+from llm.prompts import build_system_prompt, build_user_prompt
 from llm.memory import get_memory_block
 
 load_dotenv()
@@ -63,7 +63,7 @@ def narrate(
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=200,
-        system=SYSTEM_PROMPT,
+        system=build_system_prompt(state.enemy.enemy_type),
         messages=[
             {"role": "user", "content": prompt},
         ],

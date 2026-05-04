@@ -12,6 +12,7 @@ class Fighter(BaseModel):
     hp: int
     max_hp: int
     attack: int
+    enemy_type: str = "goblin"  # links to CHARACTER_VOICES
 
 
 class ActionLog(BaseModel):
