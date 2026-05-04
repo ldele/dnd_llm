@@ -14,6 +14,7 @@ Numbers are always accompanied by a semantic label.
 """
 
 from engine.state import GameState, ActionLog
+from llm.prompt_registry import get_prompt, ACTIVE_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -112,35 +113,31 @@ CHARACTER_VOICES = {
 }
 
 # ---------------------------------------------------------------------------
-# Prompt templates
+# Prompts - templates in prompt_registry.py
 # ---------------------------------------------------------------------------
 
-def build_system_prompt(enemy_type: str = "goblin") -> str:
+def build_system_prompt(
+    enemy_type: str = "goblin",
+    version: str = ACTIVE_VERSION,
+) -> str:
+    """
+    Build the system prompt for a given enemy type and prompt version.
+    Voice profile is injected only for versions that support it (v1.1+).
+    """
+    prompt_entry = get_prompt(version)
+    template = prompt_entry["system"]
+
+    # v1.0 has no voice placeholders — return as-is
+    if "{enemy_type}" not in template:
+        return template
+
     voice = CHARACTER_VOICES.get(enemy_type, CHARACTER_VOICES["goblin"])
-    return f"""You are a dungeon master narrator.
-Your ONLY job is to translate the action result into vivid prose.
-
-The enemy in this scene is a {enemy_type.replace('_', ' ')}.
-Narrate their actions in a {voice['style']} voice.
-Vocabulary guidance: {voice['vocabulary']}
-Example of correct tone: "{voice['example']}"
-
-STRICT RULES:
-- Use ONLY the facts given to you
-- Do NOT mention HP numbers
-- Do NOT invent enemies, items, or events not in the state
-- Do NOT address the player directly
-- Length: exactly 2-3 sentences
-
-OUTPUT FORMAT:
-Respond with valid JSON only. No markdown, no code fences, no extra text.
-
-{{
-  "narration": "2-3 sentence immersive description",
-  "tone": one of "tense" | "victorious" | "grim" | "neutral",
-  "hit": true or false
-}}
-"""
+    return template.format(
+        enemy_type=enemy_type.replace("_", " "),
+        style=voice["style"],
+        vocabulary=voice["vocabulary"],
+        example=voice["example"],
+    )
 
 
 def build_user_prompt(

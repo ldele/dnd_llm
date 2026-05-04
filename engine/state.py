@@ -45,7 +45,8 @@ class DebugEntry(BaseModel):
     parsed: NarrationResult
     state_snapshot: str
     eval_result: NarrationEval
-    context_usage: dict 
+    context_usage: dict
+    prompt_version: str
 
 
 class NarrationEval(BaseModel):

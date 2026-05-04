@@ -8,6 +8,7 @@ from engine.combat import player_attack, enemy_attack
 from llm.narrator import narrate
 from llm.memory import get_memory_block
 from llm.prompts import build_user_prompt, serialize_state, build_context_usage
+from llm.prompt_registry import list_versions, ACTIVE_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -49,16 +50,30 @@ if "summary" not in st.session_state:
 if "debug_log" not in st.session_state:
     st.session_state.debug_log = []  # list of DebugEntry objects
 
+if "prompt_version" not in st.session_state:
+    st.session_state.prompt_version = ACTIVE_VERSION
+
 state = st.session_state.game
 
 # ---------------------------------------------------------------------------
-# Scenario selector (only shown before game starts)
+# Scenario and Prompt version selector (only shown before game starts)
 # ---------------------------------------------------------------------------
 
 if not st.session_state.log and state.turn == 1:
-    scenario_name = st.selectbox("Choose your enemy", list(SCENARIOS.keys()))
-    selected = SCENARIOS[scenario_name]
-    st.session_state.game.enemy = selected["enemy"]
+    col_s1, col_s2 = st.columns(2)
+
+    with col_s1:
+        scenario_name = st.selectbox("Choose your enemy", list(SCENARIOS.keys()))
+        selected = SCENARIOS[scenario_name]
+        st.session_state.game.enemy = selected["enemy"]
+
+    with col_s2:
+        selected_version = st.selectbox(
+            "Prompt version",
+            list_versions(),
+            index=list_versions().index(ACTIVE_VERSION),
+        )
+        st.session_state.prompt_version = selected_version
 
 # ---------------------------------------------------------------------------
 # Layout
@@ -126,25 +141,32 @@ if state.status == "ongoing":
                 # Player turn
                 result = player_attack(state)
                 prompt = build_user_prompt(state, result, memory_block)
-                narration_result, raw, eval_result, context_usage = narrate(state, result, memory_block)
+                narration_result, raw, eval_result, context_usage, prompt_version = narrate(
+                    state, result, memory_block,
+                    prompt_version=st.session_state.prompt_version
+                )
                 st.session_state.log.append(narration_result)
                 st.session_state.narration_log.append(narration_result.narration)
                 st.session_state.debug_log.append(DebugEntry(
                     turn=state.turn,
-                    actor="player",
+                    actor="player", # or state.enemy.name
                     prompt=prompt,
                     raw_llm_output=raw,
                     parsed=narration_result,
                     state_snapshot=serialize_state(state),
                     eval_result=eval_result,
                     context_usage=context_usage,
+                    prompt_version=prompt_version,
                 ))
 
                 # Enemy turn (if still alive)
                 if state.status == "ongoing":
                     result = enemy_attack(state)
                     prompt = build_user_prompt(state, result, memory_block)
-                    narration_result, raw, eval_result, context_usage = narrate(state, result, memory_block)
+                    narration_result, raw, eval_result, context_usage, prompt_version = narrate(
+                        state, result, memory_block, 
+                        prompt_version=st.session_state.prompt_version,
+                    )
                     st.session_state.log.append(narration_result)
                     st.session_state.narration_log.append(narration_result.narration)
                     st.session_state.debug_log.append(DebugEntry(
@@ -156,6 +178,7 @@ if state.status == "ongoing":
                         state_snapshot=serialize_state(state),
                         eval_result=eval_result,
                         context_usage=context_usage,
+                        prompt_version=prompt_version,
                 ))
 
                 state.turn += 1
@@ -218,7 +241,7 @@ with st.expander("🔍 Debug Panel", expanded=False):
         for entry in reversed(st.session_state.debug_log):
             # Header with pass/fail badge
             status = "✅ PASS" if entry.eval_result.passed else "❌ FAIL"
-            st.markdown(f"**Turn {entry.turn} — {entry.actor}** {status}")
+            st.markdown(f"**Turn {entry.turn} — {entry.actor}** {status} `{entry.prompt_version}`")
 
             # Token usage
             cu = entry.context_usage

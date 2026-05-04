@@ -19,6 +19,7 @@ from engine.state import GameState, ActionLog, NarrationResult, NarrationEval
 from llm.prompts import build_system_prompt, build_user_prompt, build_context_usage
 from llm.memory import get_memory_block
 from llm.evaluator import evaluate
+from llm.prompt_registry import ACTIVE_VERSION
 
 load_dotenv()
 client = Anthropic()
@@ -76,12 +77,13 @@ def narrate(
     state: GameState,
     result: ActionLog,
     memory_block: str = "",
+    prompt_version: str = ACTIVE_VERSION,
 ) -> tuple[NarrationResult, str, NarrationEval, dict]:
     """
-    Returns (NarrationResult, raw_llm_output, NarrationEval, context_usage).
+    Returns (NarrationResult, raw_llm_output, NarrationEval, context_usage, prompt_version).
     """
     prompt = build_user_prompt(state, result, memory_block)
-    system = build_system_prompt(state.enemy.enemy_type)
+    system = build_system_prompt(state.enemy.enemy_type, version=prompt_version)
     context_usage = build_context_usage(system, prompt)
 
     raw, fallback_used = _call_api(prompt, system)
@@ -94,4 +96,4 @@ def narrate(
             fallback_used = True
 
     eval_result = evaluate(narration_result, raw, fallback_used)
-    return narration_result, raw, eval_result, context_usage
+    return narration_result, raw, eval_result, context_usage, prompt_version
