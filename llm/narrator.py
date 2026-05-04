@@ -14,7 +14,9 @@ Design rules
 import json
 from anthropic import Anthropic
 from dotenv import load_dotenv
-import time
+# import time # -> only if streaming
+from collections.abc import Generator
+
 from engine.state import GameState, ActionLog, NarrationResult, NarrationEval
 from llm.prompts import build_system_prompt, build_user_prompt, build_context_usage
 from llm.memory import get_memory_block
@@ -38,6 +40,14 @@ def _fallback(result: ActionLog) -> NarrationResult:
         tone="neutral",
         hit=False,
     )
+
+# In narrator.py, build_system_prompt needs the enemy_type
+# Pass the actor name and look it up from state.enemies
+def _get_enemy_type(state: GameState, actor: str) -> str:
+    for e in state.enemies:
+        if e.name == actor:
+            return e.enemy_type
+    return "goblin"  # fallback
 
 
 def _parse(raw: str, result: ActionLog) -> NarrationResult:
@@ -83,7 +93,8 @@ def narrate(
     Returns (NarrationResult, raw_llm_output, NarrationEval, context_usage, prompt_version).
     """
     prompt = build_user_prompt(state, result, memory_block)
-    system = build_system_prompt(state.enemy.enemy_type, version=prompt_version)
+    enemy_type = _get_enemy_type(state, result.actor)
+    system = build_system_prompt(enemy_type, version=prompt_version)
     context_usage = build_context_usage(system, prompt)
 
     raw, fallback_used = _call_api(prompt, system)
@@ -97,3 +108,43 @@ def narrate(
 
     eval_result = evaluate(narration_result, raw, fallback_used)
     return narration_result, raw, eval_result, context_usage, prompt_version
+
+
+
+# UI only
+# def narrate_stream(
+#     state: GameState,
+#     result: ActionLog,
+#     memory_block: str = "",
+#     prompt_version: str = ACTIVE_VERSION,
+# ) -> Generator[str, None, None]:
+#     """
+#     Streams only the narration text, not the raw JSON.
+#     Buffers the full response, parses the JSON, then yields
+#     the narration field word by word.
+#     """
+#     prompt = build_user_prompt(state, result, memory_block)
+#     system = build_system_prompt(state.enemy.enemy_type, version=prompt_version)
+
+#     try:
+#         # Buffer the full response first
+#         with client.messages.stream(
+#             model="claude-haiku-4-5-20251001",
+#             max_tokens=200,
+#             system=system,
+#             messages=[{"role": "user", "content": prompt}],
+#         ) as stream:
+#             full_response = stream.get_final_message().content[0].text
+
+#         # Parse JSON and extract narration
+#         parsed = _parse(full_response, result)
+#         narration = parsed.narration
+
+#         # Yield word by word for the typing effect
+#         words = narration.split(" ")
+#         for i, word in enumerate(words):
+#             yield word + ("" if i == len(words) - 1 else " ")
+#             time.sleep(0.05)  # slight delay between words
+
+#     except Exception:
+#         yield _fallback(result).narration

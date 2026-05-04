@@ -7,29 +7,60 @@ def roll_d20() -> int:
     return random.randint(1, 20)
 
 
-def player_attack(state: GameState) -> ActionLog:
-    roll = roll_d20()
-    damage = state.player.attack if roll >= 10 else 0
-    state.enemy.hp -= damage
+def living_enemies(state: GameState) -> list[Fighter]:
+    return [e for e in state.enemies if e.hp > 0]
 
-    result = ActionLog(turn=state.turn, actor="player", roll=roll, damage=damage)
-    state.log.append(result)
 
-    if state.enemy.hp <= 0:
+def player_attack(state: GameState) -> list[ActionLog]:
+    """
+    Player attacks ALL living enemies once.
+    Returns a list of ActionLog — one per enemy hit.
+    """
+    results = []
+    for enemy in living_enemies(state):
+        roll = roll_d20()
+        damage = state.player.attack if roll >= 10 else 0
+        enemy.hp -= damage
+
+        result = ActionLog(
+            turn=state.turn,
+            actor="player",
+            roll=roll,
+            damage=damage,
+            action="attack",
+        )
+        state.log.append(result)
+        results.append(result)
+
+    if all(e.hp <= 0 for e in state.enemies):
         state.status = "victory"
 
-    return result
+    return results
 
 
-def enemy_attack(state: GameState) -> ActionLog:
-    roll = roll_d20()
-    damage = state.enemy.attack if roll >= 10 else 0
-    state.player.hp -= damage
+def enemy_attack(state: GameState) -> list[ActionLog]:
+    """
+    Each living enemy attacks the player.
+    Returns a list of ActionLog — one per enemy.
+    """
+    results = []
+    for enemy in living_enemies(state):
+        roll = roll_d20()
+        damage = enemy.attack if roll >= 10 else 0
+        state.player.hp -= damage
 
-    result = ActionLog(turn=state.turn, actor="enemy", roll=roll, damage=damage)
-    state.log.append(result)
+        result = ActionLog(
+            turn=state.turn,
+            actor=enemy.name,
+            roll=roll,
+            damage=damage,
+            action="attack",
+        )
+        state.log.append(result)
+        results.append(result)
 
-    if state.player.hp <= 0:
-        state.status = "defeat"
+        if state.player.hp <= 0:
+            state.status = "defeat"
+            break
 
-    return result
+    return results

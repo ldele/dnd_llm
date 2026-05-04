@@ -15,22 +15,22 @@ def test_hp_label_boundaries():
 
 def test_serialize_state_contains_labels():
     state = init_state()
-    state.enemy.hp = 3  # bloodied
+    state.enemies[0].hp = 3  # ← was state.enemy.hp
     output = serialize_state(state)
     assert "bloodied" in output
-    assert "fresh" in output  # player is untouched
+    assert "fresh" in output
 
 
 def test_build_user_prompt_no_raw_numbers_alone():
     state = init_state()
     import engine.combat as combat
     combat.roll_d20 = lambda: 20
-    result = player_attack(state)
-    prompt = build_user_prompt(state, result)
-    # Semantic labels must be present
+    results = player_attack(state)  # ← now returns list
+    prompt = build_user_prompt(state, results[0])  # ← take first result
     assert "critical hit" in prompt
     assert "Game state" in prompt
     assert "Action result" in prompt
+
 
 def test_parse_valid_json():
     state = init_state()
@@ -44,9 +44,9 @@ def test_parse_valid_json():
 
 def test_parse_invalid_json_returns_fallback():
     state = init_state()
-    result = player_attack(state)
-    parsed = _parse("This is not JSON at all.", result)
-    assert isinstance(parsed, NarrationResult)  # fallback always returns valid object
+    results = player_attack(state)
+    parsed = _parse("This is not JSON at all.", results[0])  # ← results[0]
+    assert isinstance(parsed, NarrationResult)
 
 
 def test_parse_strips_markdown_fences():

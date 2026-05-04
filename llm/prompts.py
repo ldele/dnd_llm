@@ -53,21 +53,37 @@ def roll_label(roll: int) -> str:
 # ---------------------------------------------------------------------------
 
 def serialize_state(state: GameState) -> str:
-    """Convert GameState into a concise, LLM-readable summary."""
     p = state.player
-    e = state.enemy
-
+    enemy_lines = "\n".join(
+        f"  - {e.name}: {hp_label(e.hp, e.max_hp)} ({max(e.hp,0)}/{e.max_hp} HP)"
+        for e in state.enemies
+    )
     return (
         f"Turn: {state.turn}\n"
         f"Player — {hp_label(p.hp, p.max_hp)} ({p.hp}/{p.max_hp} HP)\n"
-        f"Enemy  — {e.name}, {hp_label(e.hp, e.max_hp)} ({e.hp}/{e.max_hp} HP)"
+        f"Enemies:\n{enemy_lines}"
     )
 
 
 def serialize_result(result: ActionLog, state: GameState) -> str:
-    """Convert an ActionLog into a concise, LLM-readable action summary."""
-    enemy_name = state.enemy.name
+    enemy_name = next(
+        (e.name for e in state.enemies if e.hp > 0),
+        state.enemies[0].name  # fallback to first if all dead
+    )
 
+    if result.action == "defend":
+        return f"Player braces for impact — defending this turn."
+
+    if result.action == "flee_success":
+        return f"Player flees successfully (roll: {result.roll}) — escapes the fight."
+
+    if result.action == "flee_fail":
+        return (
+            f"Player attempts to flee but fails (roll: {result.roll}) — "
+            f"caught by {enemy_name} and takes a free hit."
+        )
+
+    # Original attack logic
     if result.actor == "player":
         if result.damage > 0:
             return (
