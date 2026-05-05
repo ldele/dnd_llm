@@ -251,20 +251,6 @@ If the model returns invalid JSON after retries, a deterministic fallback fires 
 
 ---
 
-## CV Positioning
-
-This project demonstrates:
-
-- **System design** — deterministic core with a controlled AI presentation layer
-- **LLM engineering** — structured output, constraint enforcement, fallback handling, retry logic
-- **Prompt engineering** — dynamic voice profiles, few-shot examples, semantic serialization, prompt versioning
-- **Observability** — full traceability of every LLM interaction
-- **Evaluation** — automated constraint checking without human review
-- **Production awareness** — retry logic, token budgeting, graceful degradation
-- **Extensible architecture** — multiple enemies and new actions added without touching the LLM layer
-
----
-
 ## Estimated API Cost
 
 Using `claude-haiku-4-5-20251001` (~2 calls per turn):
