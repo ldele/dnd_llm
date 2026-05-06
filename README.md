@@ -4,13 +4,16 @@ A dungeon crawler where game logic is fully deterministic and an LLM acts purely
 
 > **Core idea: the engine decides truth. The LLM explains it.**
 
+LLM output is probabilistic and unreliable by default. It can hallucinate facts, drift from instructions, return malformed structure, or fail entirely. None of these are bugs — they're inherent properties of the model, and any system built on top of an LLM has to assume them as a baseline.
+This project demonstrates how to engineer the controls around an LLM so its output becomes dependable. The core idea: treat the LLM as a microservice behind a strict API contract. Prompts define the request shape, Pydantic models define the response shape, validation enforces the contract on every call, and deterministic fallbacks fire when validation fails. The same discipline you'd apply to any unreliable external service applies here — the LLM just happens to be the unreliable service.
+
 ---
 
 ## What this project demonstrates
 
 - Clean separation between deterministic game logic and AI narration
 - Controlled, constrained use of LLMs — the model never touches game state
-- Structured JSON output with Pydantic validation and graceful fallback
+- Structured JSON output with Pydantic validation and graceful fallback (The LLM is asked to output JSON only.)
 - Per-character voice profiles — prompt engineering for stylistically distinct narration
 - Prompt versioning — prompts treated as versioned artifacts, not hardcoded strings
 - Automatic evaluation layer — every narration checked against its own constraints
