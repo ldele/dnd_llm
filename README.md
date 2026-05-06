@@ -186,11 +186,6 @@ API calls retry up to 3 times (waits: 1s, 2s, 4s) before falling back to a deter
 ### Token budget tracking
 Every narration call estimates token usage (system prompt + user prompt) and logs it against the context limit. Visible in the debug panel per turn.
 
-### Streaming narration
-Toggle streaming mode before the fight. Narration animates word by word instead of appearing all at once.
-
-> Note: this uses client-side animation from a buffered response rather than true token streaming. True streaming with structured JSON output requires a custom text format — tracked in the roadmap.
-
 ### Observability debug panel
 Expand the debug panel at any point to inspect every turn:
 
